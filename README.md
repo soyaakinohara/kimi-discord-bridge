@@ -26,7 +26,7 @@ Because `kimi-cli` runs in `--yolo` mode (auto-approving all commands), it could
 | **Thread = Session** | Each Discord thread becomes an isolated CLI session with its own working directory. |
 | **Persistent Sessions** | Sessions survive bot restarts. Meta-data and logs are kept in `workspace/sessions/`. |
 | **File Attachments** | Drag & drop files into a thread — they are saved to the session's working directory automatically. |
-| **Web Search** | Auto-triggered search (Brave Search API) when the user asks for lookups, plus a manual `/search` command. |
+| **Web Search** | AI-triggered search via Brave Search API when context requires it, plus a manual `/search` command. |
 | **LLM-Wiki Memory** | Markdown-based personal knowledge base (`workspace/memory/`) that the assistant reads/writes across sessions. |
 | **Onboarding Wizard** | First-time setup via chat. No need to hand-edit `system_prompt.md`. |
 | **Auto Cleanup** | Inactive sessions (24 h) are archived and their attachments cleaned up automatically. |

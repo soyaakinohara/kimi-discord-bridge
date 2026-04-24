@@ -6,7 +6,7 @@ from pathlib import Path
 
 import config
 from session_manager import SessionManager, Session
-from search import brave_search, should_search, build_search_prompt
+from search import brave_search
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -192,18 +192,7 @@ async def on_message(message: discord.Message):
 
     async with message.channel.typing():
         try:
-            prompt = text
-            if should_search(text):
-                await message.channel.send("🔍 検索を実行しています...")
-                try:
-                    results = await brave_search(text, count=5)
-                    prompt = build_search_prompt(prompt, results)
-                    summary = "\n".join([f"{i+1}. {r['title']}" for i, r in enumerate(results)])
-                    await message.channel.send(f"🔍 検索結果:\n{summary}")
-                except Exception as e:
-                    await message.channel.send(f"⚠️ 検索に失敗しました: {e}")
-
-            response, new_files = await session_manager.send_message(session, prompt, attachment_paths)
+            response, new_files = await session_manager.send_message(session, text, attachment_paths)
         except Exception as e:
             await message.channel.send(f"❌ エラーが発生しました: {e}")
             return
