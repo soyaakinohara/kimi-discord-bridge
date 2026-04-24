@@ -1,0 +1,10 @@
+.env
+.bot.pid
+__pycache__/
+*.pyc
+workspace/files/*
+workspace/sessions/*
+workspace/onboarding_state.json
+workspace/.onboarding_done
+!workspace/files/.gitkeep
+!workspace/sessions/.gitkeep

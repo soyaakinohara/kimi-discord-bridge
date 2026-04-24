@@ -1,0 +1,193 @@
+# Kimi Discord Bridge
+
+A **Discord wrapper bot** for [Kimi Code CLI](https://github.com/MoonshotAI/Kimi-CLI) (or any compatible CLI assistant). It turns Discord threads into persistent, file-aware AI sessions with an optional LLM-Wiki memory system and web search.
+
+> 🚀 **First-time users get an onboarding wizard** — just talk to the bot and it will ask for your name, the assistant's name, personality, and preferences, then auto-generate a personalised system prompt.
+
+---
+
+## Disclaimer
+
+This code was written autonomously by **Kimi k2.6**. I, the person who commissioned it, am an ordinary end-user and, frankly, cannot read code.  
+**Use it at your own risk**—whatever happens is entirely your responsibility.
+
+I built this purely for my own use, to run only the essential features of existing agent harnesses in a lightweight, stable environment.  
+I may add features from time to time, but don't expect regular updates.
+
+Because `kimi-cli` runs in `--yolo` mode (auto-approving all commands), it could delete the wrong directory or otherwise damage your system.  
+**We strongly recommend running it in a snapshot/backup-capable environment (e.g., Proxmox VE).**
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Thread = Session** | Each Discord thread becomes an isolated CLI session with its own working directory. |
+| **Persistent Sessions** | Sessions survive bot restarts. Meta-data and logs are kept in `workspace/sessions/`. |
+| **File Attachments** | Drag & drop files into a thread — they are saved to the session's working directory automatically. |
+| **Web Search** | Auto-triggered search (Brave Search API) when the user asks for lookups, plus a manual `/search` command. |
+| **LLM-Wiki Memory** | Markdown-based personal knowledge base (`workspace/memory/`) that the assistant reads/writes across sessions. |
+| **Onboarding Wizard** | First-time setup via chat. No need to hand-edit `system_prompt.md`. |
+| **Auto Cleanup** | Inactive sessions (24 h) are archived and their attachments cleaned up automatically. |
+| **Daily Memory Sync** | Optional cron script (`scripts/daily_memory_sync.py`) feeds yesterday's logs back into the wiki. |
+
+---
+
+## Requirements
+
+- Python **3.11+**
+- [Kimi CLI](https://github.com/MoonshotAI/Kimi-CLI) installed and on `PATH` (or set `KIMI_PATH`)
+- A **Discord Bot Token** ([create one here](https://discord.com/developers/applications))
+- *(Optional)* **Brave Search API Key** for web search ([get one here](https://api.search.brave.com/app/keys))
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/yourname/kimi-discord-bridge.git
+cd kimi-discord-bridge
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 1. Create your `.env`
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+DISCORD_TOKEN=your_discord_bot_token_here
+WORKSPACE_DIR=./workspace
+# GUILD_ID=123456789012345678   # optional: for instant slash-command sync
+# BRAVE_API_KEY=your_key_here   # optional: enables web search
+# KIMI_PATH=/usr/local/bin/kimi # optional: if kimi is not on PATH
+```
+
+### 2. Enable required Discord Intents
+
+In your [Discord Developer Portal](https://discord.com/developers/applications):
+
+1. Go to **Bot** → turn on **Message Content Intent**.
+2. Go to **OAuth2 → URL Generator**:
+   - Scopes: `bot`, `applications.commands`
+   - Bot permissions: `Send Messages`, `Create Public Threads`, `Read Message History`, `Attach Files`, `Embed Links`, `Use Slash Commands`
+3. Open the generated URL and invite the bot to your server.
+
+### 3. Run
+
+```bash
+python main.py
+```
+
+The bot will start, sync slash commands, and print a login confirmation.
+
+---
+
+## Usage
+
+| Command | Description |
+|---------|-------------|
+| `/new` | Start a new AI session in a public thread. |
+| `/reset` | Reset the current thread's session (keeps the thread). |
+| `/stop` | Delete attachments, keep the session metadata, and archive the thread. |
+| `/search <query>` | Perform a Brave Search and return results. |
+
+### First-time Setup (Onboarding)
+
+1. Type `/new` in any channel.
+2. The bot creates a thread.
+3. **Say anything** in the thread — the onboarding wizard starts:
+   - Assistant's name
+   - Your name / how to address you
+   - Personality / tone
+   - Emoji / expression preferences
+4. The bot writes a personalised `workspace/system_prompt.md` and begins normal chat.
+
+> To skip the wizard, edit `workspace/system_prompt.md` manually and create an empty file `workspace/.onboarding_done`.
+
+---
+
+## Directory Structure
+
+```
+kimi-discord-bridge/
+├── bot.py                  # Discord bot logic
+├── session_manager.py      # Session lifecycle & Kimi CLI wrapper
+├── search.py               # Brave Search API integration
+├── config.py               # Environment & path configuration
+├── main.py                 # Entry point with PID lock
+├── scripts/
+│   └── daily_memory_sync.py   # Optional cron job for wiki maintenance
+├── workspace/
+│   ├── system_prompt.md    # Generated by onboarding (or hand-written)
+│   ├── .onboarding_done    # Flag file — wizard skips if present
+│   ├── memory/
+│   │   ├── SCHEMA.md       # Wiki schema rules
+│   │   ├── index.md        # Content catalog
+│   │   ├── entities/       # People, projects, tools, etc.
+│   │   ├── topics/         # Concepts, technologies
+│   │   ├── sources/        # Document summaries
+│   │   ├── hardware/       # Hardware inventory
+│   │   └── synthesis/      # Combined analyses
+│   ├── files/              # Session working directories
+│   └── sessions/           # Session logs & metadata
+├── .env                    # Your secrets (gitignored)
+├── .env.example            # Template
+└── requirements.txt
+```
+
+---
+
+## Memory System (LLM-Wiki)
+
+The bot injects `workspace/memory/SCHEMA.md` and `workspace/memory/index.md` into every new session as part of the system prompt. The AI assistant is expected to:
+
+- **Ingest** new facts into the wiki after conversations.
+- **Query** the wiki before answering questions.
+- **Lint** the wiki periodically (check for orphans, contradictions, stale data).
+
+You can run the daily sync manually:
+
+```bash
+python scripts/daily_memory_sync.py
+# or for a specific date
+python scripts/daily_memory_sync.py --date 20260423
+```
+
+Or add it to cron (runs at 06:00 every day):
+
+```cron
+0 6 * * * cd /path/to/kimi-discord-bridge && venv/bin/python scripts/daily_memory_sync.py >> workspace/logs/memory_sync.log 2>&1
+```
+
+---
+
+## Customisation
+
+- **Change the assistant's persona later**: Edit `workspace/system_prompt.md` and run `/reset` in a thread.
+- **Disable search**: Leave `BRAVE_API_KEY` empty in `.env`.
+- **Disable memory**: Delete or empty `workspace/memory/SCHEMA.md`.
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Slash commands don't appear | Wait up to 1 hour for global sync, or set `GUILD_ID` for instant guild sync. |
+| Bot says "Kimi CLI Error" | Make sure `kimi` is installed and on `PATH`, or set `KIMI_PATH`. |
+| Search fails | Check that `BRAVE_API_KEY` is valid and has quota remaining. |
+| Sessions not persisting | Ensure `workspace/sessions/` is writable and not on a volatile filesystem. |
+| Onboarding keeps starting | Create `workspace/.onboarding_done` manually to skip it. |
+
+---
+
+## License
+
+MIT — do whatever you want, just don't blame us if your AI becomes sentient and starts roasting your code.
