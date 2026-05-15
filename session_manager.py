@@ -13,15 +13,19 @@ class Session:
         self.name = name
         self.thread_id = thread_id
         self._work_dir = config.WORKSPACE_DIR / "files" / name
+        self._upload_dir = self._work_dir / "uploads"
         self.session_dir = config.WORKSPACE_DIR / "sessions" / name
         # session_dir はメタ・ログ保存に必須なので即作成
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        # uploads/ は即作成
+        self._upload_dir.mkdir(parents=True, exist_ok=True)
         # work_dir はファイル操作時に初めて作成（空フォルダ防止）
         self.initialized = False
         self.lock = asyncio.Lock()
         self.attachment_files: set[str] = set()
-        if self._work_dir.exists():
-            self.known_files = set(p.name for p in self._work_dir.iterdir() if p.is_file())
+        # known_files は uploads/ 内のファイルのみを監視対象とする
+        if self._upload_dir.exists():
+            self.known_files = set(p.name for p in self._upload_dir.iterdir() if p.is_file())
         else:
             self.known_files = set()
 
@@ -29,6 +33,11 @@ class Session:
     def work_dir(self) -> Path:
         self._work_dir.mkdir(parents=True, exist_ok=True)
         return self._work_dir
+
+    @property
+    def upload_dir(self) -> Path:
+        self._upload_dir.mkdir(parents=True, exist_ok=True)
+        return self._upload_dir
 
 
 class SessionManager:
@@ -127,8 +136,8 @@ class SessionManager:
                     f.unlink()
 
         session.attachment_files = set()
-        # known_files からも添付ファイルを除外
-        session.known_files = set(p.name for p in session._work_dir.iterdir() if p.is_file())
+        # known_files からも添付ファイルを除外（uploads/ のみ対象）
+        session.known_files = set(p.name for p in session._upload_dir.iterdir() if p.is_file())
         self._save_meta(session)
         return session
 
@@ -187,6 +196,17 @@ class SessionManager:
                 index_text = index_path.read_text(encoding="utf-8")
                 parts.append(f"\n\n---\n\n# Current Memory Index\n\n{index_text}")
 
+            # Discordファイルアップロードルールを追加
+            parts.append(
+                "\n\n---\n\n"
+                "# Discord File Upload Rule\n\n"
+                "このセッションでは、生成したファイルをDiscordに自動アップロードできます。\n"
+                "ファイルをDiscordに送りたい場合は、必ず `uploads/` サブディレクトリに保存してください。\n"
+                "例: `workspace/files/<session_name>/uploads/my_image.png`\n"
+                "`uploads/` 以外の場所に保存されたファイルは、Discordには送信されません。\n"
+                "機密性の高いファイル（.env、SSH鍵、APIキー等）は `uploads/` に絶対に保存しないでください。"
+            )
+
             if not parts:
                 session.initialized = True
                 self._save_meta(session)
@@ -215,10 +235,17 @@ class SessionManager:
 
         response = await self._run_kimi(session.name, prompt, session.work_dir)
 
-        # 新規ファイルを検出
-        current_files = set(p.name for p in session.work_dir.iterdir() if p.is_file())
+        # 新規ファイルを検出（uploads/ のみ対象）
+        if session.upload_dir.exists():
+            current_files = set(p.name for p in session.upload_dir.iterdir() if p.is_file())
+        else:
+            current_files = set()
         new_files = list(current_files - session.known_files)
         session.known_files = current_files
+
+        # 添付ファイルを known_files に含めて、再送信を防ぐ
+        for p in attachment_paths:
+            session.known_files.add(p.name)
 
         # ログ保存
         log_path = session.session_dir / "log.txt"
@@ -339,5 +366,12 @@ class SessionManager:
 - Discord スレッド = 1つの CLI セッション
 - 添付ファイルは `workspace/files/<session_name>/` に自動保存される
 - セッションログは `workspace/sessions/<session_name>/log.txt` に保存される
+
+## Discord ファイルアップロード
+
+- 生成したファイルを Discord に自動送信したい場合は、`uploads/` サブディレクトリに保存してください
+- 例: `workspace/files/<session_name>/uploads/my_image.png`
+- `uploads/` 以外の場所に保存されたファイルは Discord に送信されません
+- 機密ファイル（.env、SSH鍵、APIキー等）は `uploads/` に絶対に保存しないでください
 """
         config.SYSTEM_PROMPT_PATH.write_text(prompt, encoding="utf-8")

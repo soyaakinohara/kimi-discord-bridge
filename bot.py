@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -205,7 +206,35 @@ async def on_message(message: discord.Message):
         await message.channel.send(chunk)
 
     if new_files:
-        await message.channel.send(f"💾 新しいファイルが作成されました: {', '.join(new_files)}")
+        uploaded: list[discord.File] = []
+        nas_links: list[str] = []
+        for fname in new_files:
+            fpath = session.upload_dir / fname
+            if not fpath.exists():
+                continue
+            size = fpath.stat().st_size
+            if size > 8 * 1024 * 1024:  # Discord 8MB limit
+                nas_dir = Path("/mnt/nas") / session.name
+                try:
+                    nas_dir.mkdir(parents=True, exist_ok=True)
+                    nas_path = nas_dir / fname
+                    shutil.copy2(fpath, nas_path)
+                    nas_links.append(
+                        f"`{fname}` → `/mnt/nas/{session.name}/{fname}` ({size / 1024 / 1024:.1f}MB)"
+                    )
+                except Exception:
+                    nas_links.append(
+                        f"`{fname}` → Discord送信不可 ({size / 1024 / 1024:.1f}MB)"
+                    )
+            else:
+                uploaded.append(discord.File(fpath))
+
+        if uploaded:
+            await message.channel.send("💾 新しいファイル:", files=uploaded)
+        if nas_links:
+            await message.channel.send(
+                "📦 大きなファイル:\n" + "\n".join(nas_links)
+            )
 
 
 @bot.tree.command(name="search", description="Brave Search で検索します")
