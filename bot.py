@@ -191,12 +191,19 @@ async def on_message(message: discord.Message):
         if saved_names:
             await message.channel.send(f"📎 ファイルを保存しました: {', '.join(saved_names)}")
 
-    async with message.channel.typing():
-        try:
-            response, new_files = await session_manager.send_message(session, text, attachment_paths)
-        except Exception as e:
-            await message.channel.send(f"❌ エラーが発生しました: {e}")
-            return
+    status_msg = None
+    try:
+        status_msg = await message.channel.send("🤔 考え中...")
+        response, new_files = await session_manager.send_message(session, text, attachment_paths)
+    except Exception as e:
+        await message.channel.send(f"❌ エラーが発生しました: {e}")
+        return
+    finally:
+        if status_msg:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
 
     if not response:
         response = "（応答なし）"
